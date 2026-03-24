@@ -21,14 +21,13 @@ col1, col2, col3 = st.columns(3)
 with col1:
     accion = st.selectbox("Acción:", ["Ingreso (Compré)", "Gasto (Consumí)"])
 with col2:
-    # IMPORTANTE: Pasamos a minúsculas para evitar duplicados en Firebase
-    nombre_prod = st.text_input("Nombre del producto:").strip().lower()
+    nombre_prod = st.text_input("Nombre del producto:").strip().lower() # Siempre minúsculas para coincidir con Firebase
 with col3:
     cantidad_mov = st.number_input("Cantidad:", min_value=0.0, step=1.0)
 
 if st.button("Confirmar Movimiento", use_container_width=True):
     if nombre_prod:
-        # Buscamos el documento en la colección 'productos'
+        # Buscamos el documento exacto en Firebase (ej: 'sal')
         doc_ref = db.collection("productos").document(nombre_prod)
         doc = doc_ref.get()
         
@@ -42,33 +41,26 @@ if st.button("Confirmar Movimiento", use_container_width=True):
         else:
             nueva_cant = cant_actual + cantidad_mov
             
-        # GUARDAR EN FIREBASE
+        # ESCRIBIR EN FIREBASE
         doc_ref.set({
             "nombre": nombre_prod.capitalize(),
             "cantidad": nueva_cant,
             "ultima_actualizacion": datetime.now()
         }, merge=True)
         
-        # Guardar en el Historial
-        db.collection("historial").add({
-            "producto": nombre_prod.capitalize(),
-            "tipo": "ENTRADA" if "Ingreso" in accion else "SALIDA",
-            "cantidad": cantidad_mov,
-            "fecha": datetime.now()
-        })
-        
-        st.success(f"✅ Actualizado en Firebase: {nombre_prod.capitalize()} ahora tiene {nueva_cant}")
-        st.rerun() # Esto obliga a la app a leer los nuevos datos inmediatamente
+        # RECARGA FORZADA: Esto es lo que faltaba para que veas el cambio
+        st.success(f"✅ ¡Firebase actualizado! {nombre_prod.capitalize()} ahora tiene {nueva_cant}")
+        st.rerun() 
     else:
         st.error("⚠️ Por favor ingresa un nombre.")
 
 st.divider()
 
-# --- SECCIÓN 2: MOSTRAR TODA LA DESPENSA (SOLUCIÓN REAL) ---
-st.header("2. Inventario Total en Firebase")
+# --- SECCIÓN 2: LECTURA REAL DE TODA LA DESPENSA ---
+st.header("2. Inventario Total (Desde la Nube)")
 
-# Esta parte del código "va y busca" TODO lo que hay en tu carpeta 'productos'
-productos_stream = db.collection("productos").stream()
+# Forzamos a Streamlit a pedirle a Firebase todos los documentos cada vez que carga
+productos_stream = db.collection("productos").get() # .get() es más seguro que .stream() para tablas estáticas
 datos_tabla = []
 
 for p in productos_stream:
@@ -76,12 +68,11 @@ for p in productos_stream:
     datos_tabla.append({
         "Producto": info.get("nombre", p.id.capitalize()),
         "Stock Actual": info.get("cantidad", 0),
-        "Último Movimiento": info.get("ultima_actualizacion")
+        "ID en Firebase": p.id
     })
 
 if datos_tabla:
     df = pd.DataFrame(datos_tabla)
-    # Mostramos la tabla completa
     st.dataframe(df, use_container_width=True, hide_index=True)
 else:
-    st.info("No hay productos registrados en Firebase aún.")
+    st.info("No hay productos detectados en la colección 'productos' de Firebase.")
