@@ -1,3 +1,5 @@
+import os
+st.write("Archivos en el entorno:", os.listdir())
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
