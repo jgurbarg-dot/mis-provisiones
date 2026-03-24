@@ -11,7 +11,7 @@ st.title("📦 GESTIÓN DE MI DESPENSA")
 def conectar_firebase():
     if not firebase_admin._apps:
         try:
-            cred = credentials.Certificate("misprovisionesfirebaseadminsdkfbsvca5d031c255.json")
+            cred = credentials.Certificate("misprovisionesfirebaseadminsdkfbsvc674f03e169.json")
             firebase_admin.initialize_app(cred)
             st.success("✅ Firebase conectado")
             return firestore.client()
