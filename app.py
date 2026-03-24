@@ -10,7 +10,7 @@ def conectar_firebase():
     if not firebase_admin._apps:
         try:
             # VERIFICA QUE ESTE NOMBRE SEA EXACTO AL DE GITHUB
-            cred = credentials.Certificate("mis-provisiones-firebase-adminsdk-fbsvc-1ce1062898.json")
+            cred = credentials.Certificate("misprovisionesfirebaseadminsdkfbsvca5d031c255.json")
             firebase_admin.initialize_app(cred)
             return firestore.client()
         except Exception as e:
