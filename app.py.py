@@ -1,60 +1,90 @@
-
 import streamlit as st
 import firebase_admin
-from firebase_admin import credentials
-from firebase_admin import firestore
+from firebase_admin import credentials, firestore
+import pandas as pd
+from datetime import datetime
 
-# 1. Mantenemos tu conexión (asegúrate que el JSON esté en la misma carpeta en GitHub)
+# 1. Conexión con Firebase
 if not firebase_admin._apps:
     cred = credentials.Certificate("mis-provisiones-firebase-adminsdk-fbsvc-29b42419c3.json")
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# 2. Interfaz de Streamlit (Sustituye al print inicial)
-st.title("GESTIÓN DE PROVISIONES")
+st.set_page_config(page_title="Control de Provisiones", layout="wide")
+st.title("📦 GESTIÓN INTEGRAL DE PROVISIONES")
 
-# 3. Sustituimos los 'input()' por campos de texto y número de Streamlit
-nombre = st.text_input("Producto:").strip().capitalize()
-cantidad_nueva = st.number_input("¿Cuánta cantidad ingresó?", min_value=0.0, step=1.0)
+# --- SECCIÓN 1: ENTRADA DE DATOS ---
+st.header("1. Registrar Movimiento")
+col1, col2, col3 = st.columns(3)
 
-# 4. Usamos un botón para ejecutar tu lógica (sustituye al flujo del while)
-if st.button("Actualizar Inventario"):
+with col1:
+    accion = st.selectbox("Acción:", ["Ingreso (Compré)", "Gasto (Consumí)"])
+with col2:
+    nombre = st.text_input("Producto:").strip().capitalize()
+with col3:
+    cantidad_op = st.number_input("Cantidad:", min_value=0.0, step=1.0)
+
+if st.button("Confirmar Movimiento", use_container_width=True):
     if nombre:
         doc_ref = db.collection("productos").document(nombre.lower())
         doc = doc_ref.get()
-
-        if doc.exists:
-            cantidad_actual = doc.to_dict().get("cantidad", 0)
-            nueva_total = cantidad_actual + cantidad_nueva
-            doc_ref.update({"cantidad": nueva_total})
-            # Sustituimos print() por st.success() para que se vea en la web
-            st.success(f"Actualizado: Ahora tienes {nueva_total} de {nombre}.")
+        
+        cant_previa = doc.to_dict().get("cantidad", 0) if doc.exists else 0
+        
+        # Calculamos el nuevo total
+        if "Gasto" in accion:
+            nueva_cant = cant_previa - cantidad_op
+            if nueva_cant < 0: nueva_cant = 0
+            tipo_log = "SALIDA"
         else:
-            doc_ref.set({
-                "nombre": nombre,
-                "cantidad": cantidad_nueva,
-                "unidad": "unidades"
-            })
-            st.info(f"Nuevo Producto: {nombre} guardado con {cantidad_nueva}.")
+            nueva_cant = cant_previa + cantidad_op
+            tipo_log = "ENTRADA"
+            
+        # Guardamos el stock actual
+        doc_ref.set({"cantidad": nueva_cant, "ultima_actualizacion": datetime.now()})
+        
+        # Guardamos el historial (Log)
+        db.collection("historial").add({
+            "producto": nombre,
+            "tipo": tipo_log,
+            "cantidad": cantidad_op,
+            "fecha": datetime.now()
+        })
+        
+        st.success(f"Movimiento registrado. {nombre} ahora tiene {nueva_cant} unidades.")
     else:
-        st.warning("Por favor, escribe el nombre de un producto.")
+        st.error("Escribe un nombre de producto.")
 
-# 5. Mostrar el inventario (Tu bloque final de print)
-st.subheader("--- INVENTARIO ACTUALIZADO EN LA NUBE ---")
+st.divider()
+
+# --- SECCIÓN 2: DISPONIBILIDAD ACTUAL ---
+st.header("2. Inventario Disponible (Cantidades Actuales)")
+
 productos = db.collection("productos").stream()
+lista_prod = []
 for p in productos:
-    datos = p.to_dict()
-    # Sustituimos el print final por st.write
-    st.write(f"**{datos['nombre']}**: {datos['cantidad']} {datos.get('unidad', '')}")
+    d = p.to_dict()
+    lista_prod.append({"Producto": p.id.capitalize(), "Stock Actual": d.get("cantidad", 0)})
 
-import firebase_admin
-from firebase_admin import credentials, firestore
+if lista_prod:
+    df_stock = pd.DataFrame(lista_prod)
+    st.table(df_stock) # Muestra una tabla limpia
+else:
+    st.info("No hay productos en el inventario.")
 
-if not firebase_admin._apps:
-  ruta_llave="/content/mis-provisiones-firebase-adminsdk-fbsvc-29b42419c3.json"
-  cred=credentials.Certificate(ruta_llave)
-  firebase_admin.initialize_app(cred)
-db=firestore.client()
+# --- SECCIÓN 3: HISTORIAL DE MOVIMIENTOS ---
+st.header("3. ¿En qué se fue el stock? (Historial)")
 
-db.collection("estado").document("conexion").set({"mensaje":"!Hola desde el otro email!","funciona":True})
-print("¡Conexión exitosa! Ve a revisar tu pestaña de Firebase.")
+historial = db.collection("historial").order_by("fecha", direction=firestore.Query.DESCENDING).limit(10).stream()
+lista_hist = []
+for h in historial:
+    d = h.to_dict()
+    lista_hist.append({
+        "Fecha": d["fecha"].strftime("%d/%m/%Y %H:%M"),
+        "Producto": d["producto"],
+        "Movimiento": d["tipo"],
+        "Cantidad": d["cantidad"]
+    })
+
+if lista_hist:
+    st.dataframe(pd.DataFrame(lista_hist), use_container_width=True)
