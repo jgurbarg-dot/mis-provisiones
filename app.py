@@ -7,7 +7,7 @@ import pandas as pd
 if not firebase_admin._apps:
     try:
         # PONE AQUÍ EL NOMBRE DE TU ARCHIVO NUEVO
-        cred = credentials.Certificate("PON_AQUI_EL_NOMBRE_DE_TU_NUEVO_JSON.json")
+        cred = credentials.Certificate("mis-provisiones-firebase-adminsdk-fbsvc-1ce1062898.json")
         firebase_admin.initialize_app(cred)
     except Exception as e:
         st.error(f"❌ Error de conexión: {e}")
