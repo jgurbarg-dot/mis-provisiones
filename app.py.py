@@ -88,3 +88,23 @@ for h in historial:
 
 if lista_hist:
     st.dataframe(pd.DataFrame(lista_hist), use_container_width=True)
+# --- INVENTARIO ACTUAL (STOCK DISPONIBLE) ---
+st.header("4. Inventario Disponible (Totales)")
+
+# 1. Consultar la colección de productos
+productos_ref = db.collection("productos").stream()
+
+inventario_lista = []
+
+for p in productos_ref:
+    datos = p.to_dict()
+    inventario_lista.append({
+        "Producto": p.id.capitalize(),
+        "Cantidad disponible": datos.get("cantidad", 0)
+    })
+
+# 2. Mostrarlo en una tabla si hay datos
+if inventario_lista:
+    st.dataframe(pd.DataFrame(inventario_lista), use_container_width=True)
+else:
+    st.write("No hay productos registrados en el inventario.")
