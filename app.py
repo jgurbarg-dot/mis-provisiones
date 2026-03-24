@@ -7,7 +7,7 @@ from datetime import datetime
 # 1. CONEXIÓN A LA BASE DE DATOS
 if not firebase_admin._apps:
     # REEMPLAZA EL NOMBRE ABAJO POR EL DE TU ARCHIVO NUEVO
-    cred = credentials.Certificate("TU-NUEVO-ARCHIVO.json")
+    cred = credentials.Certificate("mis-provisiones-firebase-adminsdk-fbsvc-1ce1062898.json")
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
