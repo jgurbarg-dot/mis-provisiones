@@ -4,93 +4,84 @@ from firebase_admin import credentials, firestore
 import pandas as pd
 from datetime import datetime
 
-# 1. CONEXIÓN SEGURA A FIREBASE
+# 1. CONEXIÓN (Solo se inicializa una vez)
 if not firebase_admin._apps:
-    # Asegúrate de que este nombre de archivo sea EXACTO al que subiste a tu repo
     cred = credentials.Certificate("mis-provisiones-firebase-adminsdk-fbsvc-29b42419c3.json")
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 
 st.set_page_config(page_title="Mi Despensa", layout="wide")
-st.title("📦 GESTIÓN INTEGRAL DE PROVISIONES")
+st.title("📦 GESTIÓN DE MI DESPENSA")
 
-# --- SECCIÓN 1: REGISTRO DE MOVIMIENTOS ---
-st.header("1. Registrar Movimiento")
+# --- SECCIÓN 1: REGISTRO DE PRODUCTOS ---
+st.header("1. Registrar o Actualizar Producto")
 col1, col2, col3 = st.columns(3)
 
 with col1:
     accion = st.selectbox("Acción:", ["Ingreso (Compré)", "Gasto (Consumí)"])
 with col2:
-    # Usamos minúsculas para que coincida con tus IDs de Firebase (azucar, sal, pan)
-    nombre_input = st.text_input("Producto:").strip().lower()
+    # IMPORTANTE: Pasamos a minúsculas para evitar duplicados en Firebase
+    nombre_prod = st.text_input("Nombre del producto:").strip().lower()
 with col3:
-    cantidad_op = st.number_input("Cantidad:", min_value=0.0, step=1.0)
+    cantidad_mov = st.number_input("Cantidad:", min_value=0.0, step=1.0)
 
 if st.button("Confirmar Movimiento", use_container_width=True):
-    if nombre_input:
-        # Referencia exacta al documento en la colección 'productos'
-        doc_ref = db.collection("productos").document(nombre_input)
+    if nombre_prod:
+        # Buscamos el documento en la colección 'productos'
+        doc_ref = db.collection("productos").document(nombre_prod)
         doc = doc_ref.get()
         
-        # Obtenemos la cantidad que YA existe en Firebase
-        if doc.exists:
-            datos_actuales = doc.to_dict()
-            cant_en_fire = datos_actuales.get("cantidad", 0)
-        else:
-            cant_en_fire = 0
+        # Leemos la cantidad actual desde Firebase
+        cant_actual = doc.to_dict().get("cantidad", 0) if doc.exists else 0
         
-        # Cálculo del nuevo total
+        # Calculamos el nuevo total
         if "Gasto" in accion:
-            nueva_cant = cant_en_fire - cantidad_op
+            nueva_cant = cant_actual - cantidad_mov
             if nueva_cant < 0: nueva_cant = 0
-            tipo_log = "SALIDA"
         else:
-            nueva_cant = cant_en_fire + cantidad_op
-            tipo_log = "ENTRADA"
+            nueva_cant = cant_actual + cantidad_mov
             
-        # ACTUALIZACIÓN REAL EN FIREBASE
-        # Usamos set con merge=True para no borrar campos como 'unidad'
+        # GUARDAR EN FIREBASE
         doc_ref.set({
-            "nombre": nombre_input.capitalize(),
+            "nombre": nombre_prod.capitalize(),
             "cantidad": nueva_cant,
             "ultima_actualizacion": datetime.now()
         }, merge=True)
         
         # Guardar en el Historial
         db.collection("historial").add({
-            "producto": nombre_input.capitalize(),
-            "tipo": tipo_log,
-            "cantidad": cantidad_op,
+            "producto": nombre_prod.capitalize(),
+            "tipo": "ENTRADA" if "Ingreso" in accion else "SALIDA",
+            "cantidad": cantidad_mov,
             "fecha": datetime.now()
         })
         
-        st.success(f"✅ ¡Firebase actualizado! {nombre_input} ahora tiene {nueva_cant}")
-        # FORZAR RECARGA DE LA APP PARA ACTUALIZAR TABLAS
-        st.rerun()
+        st.success(f"✅ Actualizado en Firebase: {nombre_prod.capitalize()} ahora tiene {nueva_cant}")
+        st.rerun() # Esto obliga a la app a leer los nuevos datos inmediatamente
     else:
-        st.error("Escribe el nombre del producto.")
+        st.error("⚠️ Por favor ingresa un nombre.")
 
 st.divider()
 
-# --- SECCIÓN 2: VISUALIZACIÓN DE TODA LA DESPENSA ---
-st.header("2. Mi Despensa Completa")
+# --- SECCIÓN 2: MOSTRAR TODA LA DESPENSA (SOLUCIÓN REAL) ---
+st.header("2. Inventario Total en Firebase")
 
-# Traemos todos los documentos de la colección 'productos'
-productos_fire = db.collection("productos").stream()
-lista_completa = []
+# Esta parte del código "va y busca" TODO lo que hay en tu carpeta 'productos'
+productos_stream = db.collection("productos").stream()
+datos_tabla = []
 
-for p in productos_fire:
-    datos = p.to_dict()
-    lista_completa.append({
-        "Producto": p.id.capitalize(), # Usa el ID del documento (azucar, sal...)
-        "Stock Disponible": datos.get("cantidad", 0),
-        "Unidad": datos.get("unidad", "unidades")
+for p in productos_stream:
+    info = p.to_dict()
+    datos_tabla.append({
+        "Producto": info.get("nombre", p.id.capitalize()),
+        "Stock Actual": info.get("cantidad", 0),
+        "Último Movimiento": info.get("ultima_actualizacion")
     })
 
-if lista_completa:
-    # Creamos un DataFrame para mostrar todo como una tabla limpia
-    df_despensa = pd.DataFrame(lista_completa)
-    st.dataframe(df_despensa, use_container_width=True, hide_index=True)
+if datos_tabla:
+    df = pd.DataFrame(datos_tabla)
+    # Mostramos la tabla completa
+    st.dataframe(df, use_container_width=True, hide_index=True)
 else:
-    st.warning("No se encontraron productos en la colección 'productos' de Firebase.")
+    st.info("No hay productos registrados en Firebase aún.")
